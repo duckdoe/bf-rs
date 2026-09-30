@@ -21,14 +21,13 @@ enum Token {
     Rbrack,  // ]
     Rarr,    // >
     Larr,    // <
-    Sub,     // -
-    Add,     // +
+    Sub(usize),     // -
+    Add(usize),     // +
     Eof,     // \0
 }
 
 enum TokenizerError {
     UnableToTokenize,
-    UnknownTokenError(char),
 }
 
 enum InterpreterError {
@@ -49,7 +48,7 @@ fn open_file(file_name: &str) -> Result<File, FileError> {
 
 fn tokenize(file: File) -> Result<Vec<Token>, TokenizerError> {
     let mut tokens = vec![];
-    let mut contents = file.contents.chars();
+    let mut contents = file.contents.chars().peekable();
 
     loop {
         // for each loop-back we are going to generate a token
@@ -76,10 +75,20 @@ fn tokenize(file: File) -> Result<Vec<Token>, TokenizerError> {
                     tokens.push(Token::Rbrack);
                 }
                 '-' => {
-                    tokens.push(Token::Sub);
+                    let mut times = 1;
+                    while let Some (ch) = contents.peek() && *ch == '-'{
+                        contents.next();
+                        times += 1;
+                    }
+                    tokens.push(Token::Sub(times));
                 }
                 '+' => {
-                    tokens.push(Token::Add);
+                    let mut times = 1;
+                    while let Some (ch) = contents.peek() && *ch == '+'{
+                        contents.next();
+                        times += 1;
+                    }
+                    tokens.push(Token::Add(times));
                 }
                 '\0' => {
                     tokens.push(Token::Eof);
@@ -88,7 +97,7 @@ fn tokenize(file: File) -> Result<Vec<Token>, TokenizerError> {
                     if ch.is_ascii_whitespace() {
                         continue;
                     }
-                    return Err(TokenizerError::UnknownTokenError(ch));
+                    continue; // Instead of trhowing an error we ignore them
                 }
             },
             None => {
@@ -169,11 +178,13 @@ fn interprete(tokens: Vec<Token>, memory: &mut [u8]) -> Result<(), InterpreterEr
                                       // And that the '[' has beem terminated
                 }
             }
-            Token::Add => {
-                memory[memory_ptr] = memory[memory_ptr].wrapping_add(1);
+            Token::Add(amount) => {
+                let amount = *amount as u8;
+                memory[memory_ptr] = memory[memory_ptr].wrapping_add(amount);
             }
-            Token::Sub => {
-                memory[memory_ptr] = memory[memory_ptr].wrapping_sub(1);
+            Token::Sub(amount) => {
+                let amount = *amount as u8;
+                memory[memory_ptr] = memory[memory_ptr].wrapping_sub(amount);
             }
             Token::PutChar => {
                 let block_value = memory[memory_ptr];
@@ -253,9 +264,6 @@ fn main() {
             }
         }
         Err(err) => match err {
-            TokenizerError::UnknownTokenError(ch) => {
-                eprintln!("Unknown command '{ch}'");
-            }
             TokenizerError::UnableToTokenize => {
                 eprintln!("Unable to tokenize for some odd reason");
             }
